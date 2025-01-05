@@ -36,8 +36,8 @@ def filter_proxies(proxies, count=10):
     return filtered_proxies
 
 if __name__ == "__main__":
-    # URL do ProxyScrape
-    url = "https://api.proxyscrape.com/?request=getproxies&proxytype=http&timeout=1000&country=all&ssl=all&anonymity=all"
+    # URL atualizado da API da ProxyScrape
+    url = "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text"
     
     # Passos
     print("Obtendo proxies...")
