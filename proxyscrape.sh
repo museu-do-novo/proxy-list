@@ -7,8 +7,9 @@ list=./proxyscrape.txt
 url="https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&protocol=http&proxy_format=protocolipport&format=text&timeout=1000"
 
 # puxa a lista pela api do proxiscrape
-if curl "$url" > "$list"; then
+if curl -s "$url" > "$list"; then
   echo "lista salva em: $list"
+  cat "$list"
   else 
     echo "erro"
     exit 1;
