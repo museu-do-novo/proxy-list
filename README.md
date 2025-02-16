@@ -10,7 +10,7 @@ Ferramenta para coleta e análise de proxies públicos via linha de comando.
 2. **Download**:
    ```bash
    git clone https://github.com/seu-usuario/proxy-tool.git
-   cd proxy-tool
+   cd proxy-list
    chmod +x proxytool.sh
    ```
 
