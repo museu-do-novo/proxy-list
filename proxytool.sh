@@ -14,10 +14,12 @@ NC='\033[0m'
 # Valores Padrão
 DEFAULT_OUTPUT="./proxies.txt"
 DEFAULT_PROTOCOL="http"
-DEFAULT_TIMEOUT="5000"
+DEFAULT_TIMEOUT="500"
 DEFAULT_COUNTRY="all"
 DEFAULT_PORT_CHECK="false"
 DEFAULT_SPEED_TEST="false"
+DEFAULT_PING_CHECK="false"
+DEFAULT_CHECK_PROXIES="false"  # Verificação de proxies desativada por padrão
 API_URL="https://api.proxyscrape.com/v4/free-proxy-list/get"
 
 # ==============================================
@@ -31,13 +33,14 @@ show_help() {
     echo "  -p <protocolo>  Protocolo (http, socks4, socks5) (padrão: ${DEFAULT_PROTOCOL})"
     echo "  -t <timeout>    Timeout em ms (padrão: ${DEFAULT_TIMEOUT})"
     echo "  -c <país>       Filtrar por país (ex: US, BR) (padrão: ${DEFAULT_COUNTRY})"
-    echo "  -P              Verificar portas abertas"
+    echo "  -P              Verificar ping dos proxies"
     echo "  -S              Testar velocidade com speedtest-go"
+    echo "  -C              Verificar proxies (ping, porta, velocidade)"
     echo "  -l              Listar proxies"
     echo "  -h              Ajuda"
     echo -e "\nExemplos:"
-    echo "  $0 -p socks5 -c US -PS"
-    echo "  $0 -o fast_proxies.txt -t 10000"
+    echo "  $0 -p socks5 -c US -C"
+    echo "  $0 -o fast_proxies.txt -t 10000 -l"
     exit 0
 }
 
@@ -100,19 +103,40 @@ test_speed() {
     local proxy=$1
     echo -e "\n${YELLOW}Testando velocidade via proxy: ${proxy}${NC}"
     
-    # Usa speedtest-go com proxy
-    if speedtest-go --proxy="http://${proxy}" --json &> /dev/null; then
-        local result=$(speedtest-go --proxy="http://${proxy}" --json)
-        local download=$(echo "$result" | jq -r '.download.bandwidth')
-        local upload=$(echo "$result" | jq -r '.upload.bandwidth')
-        local ping=$(echo "$result" | jq -r '.ping.latency')
-        
-        echo -e "${BLUE}Download: $(echo "scale=2; $download / 125000" | bc) Mbps${NC}"
-        echo -e "${BLUE}Upload: $(echo "scale=2; $upload / 125000" | bc) Mbps${NC}"
-        echo -e "${BLUE}Ping: ${ping} ms${NC}"
-    else
-        echo -e "${RED}Falha ao testar velocidade!${NC}"
+    # Executa o speedtest-go com proxy
+    local result
+    if ! result=$(speedtest-go --proxy="http://${proxy}" --json 2>&1); then
+        echo -e "${RED}Falha ao executar speedtest-go!${NC}" >&2
+        echo -e "${YELLOW}Detalhes: ${result}${NC}" >&2
+        return
     fi
+
+    # Processa o resultado
+    local download=$(echo "$result" | jq -r '.download.bandwidth')
+    local upload=$(echo "$result" | jq -r '.upload.bandwidth')
+    local ping=$(echo "$result" | jq -r '.ping.latency')
+    
+    # Exibe os resultados
+    echo -e "${BLUE}Download: $(echo "scale=2; $download / 125000" | bc) Mbps${NC}"
+    echo -e "${BLUE}Upload: $(echo "scale=2; $upload / 125000" | bc) Mbps${NC}"
+    echo -e "${BLUE}Ping: ${ping} ms${NC}"
+}
+
+check_ping() {
+    local proxy=$1
+    echo -e "\n${YELLOW}Verificando ping do proxy: ${proxy}${NC}"
+    
+    # Executa o speedtest-go para verificar o ping
+    local result
+    if ! result=$(speedtest-go --proxy="http://${proxy}" --ping-mode="http" --json 2>&1); then
+        echo -e "${RED}Falha ao verificar ping!${NC}" >&2
+        echo -e "${YELLOW}Detalhes: ${result}${NC}" >&2
+        return
+    fi
+
+    # Processa o resultado
+    local ping=$(echo "$result" | jq -r '.ping.latency')
+    echo -e "${GREEN}Ping: ${ping} ms${NC}"
 }
 
 check_proxy() {
@@ -125,19 +149,21 @@ check_proxy() {
 
     echo -e "\n${YELLOW}Proxy: ${host}:${port}${NC}"
     
-    # Ping (substituído por speedtest-go)
-    if speedtest-go --proxy="http://${host}:${port}" --ping-mode="http" --json &> /dev/null; then
-        echo -e "${GREEN}Ping OK${NC}"
-    else
-        echo -e "${RED}Ping falhou${NC}"
-        return
-    fi
+    # Ping (opcional)
+    [[ "$ping_check" == true ]] && check_ping "${host}:${port}"
 
     # Porta
     [[ "$check_port" == true ]] && check_port "$host" "$port"
 
     # Velocidade
     [[ "$speed_test" == true ]] && test_speed "${host}:${port}"
+}
+
+verify_proxies() {
+    echo -e "${BLUE}Verificando proxies...${NC}"
+    while read -r proxy; do
+        check_proxy "$proxy"
+    done < "$output_file"
 }
 
 list_proxies() {
@@ -153,15 +179,27 @@ main() {
     clear
     check_deps
 
+    # Inicializa variáveis com valores padrão
+    output_file="${DEFAULT_OUTPUT}"
+    protocol="${DEFAULT_PROTOCOL}"
+    timeout="${DEFAULT_TIMEOUT}"
+    country="${DEFAULT_COUNTRY}"
+    check_port="${DEFAULT_PORT_CHECK}"
+    speed_test="${DEFAULT_SPEED_TEST}"
+    ping_check="${DEFAULT_PING_CHECK}"
+    check_proxies="${DEFAULT_CHECK_PROXIES}"
+    list_proxies=false
+
     # Processar argumentos
-    while getopts "o:p:t:c:PSlh" opt; do
+    while getopts "o:p:t:c:PSClh" opt; do
         case "$opt" in
             o) output_file="${OPTARG:-${DEFAULT_OUTPUT}}" ;;
             p) protocol="${OPTARG:-${DEFAULT_PROTOCOL}}" ;;
             t) timeout="${OPTARG:-${DEFAULT_TIMEOUT}}" ;;
             c) country="${OPTARG:-${DEFAULT_COUNTRY}}" ;;
-            P) check_port=true ;;
+            P) ping_check=true ;;
             S) speed_test=true ;;
+            C) check_proxies=true ;;
             l) list_proxies=true ;;
             h) show_help ;;
             *) echo -e "${RED}Opção inválida!${NC}"; exit 1 ;;
@@ -174,12 +212,10 @@ main() {
     # Baixar proxies
     fetch_proxies
 
-    # Verificações
-    while read -r proxy; do
-        check_proxy "$proxy"
-    done < "$output_file"
+    # Verificar proxies (opcional)
+    [[ "$check_proxies" == true ]] && verify_proxies
 
-    # Listar
+    # Listar proxies (opcional)
     [[ "$list_proxies" == true ]] && list_proxies
 
     echo -e "\n${GREEN}Concluído!${NC}"
