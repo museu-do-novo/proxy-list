@@ -20,6 +20,7 @@ DEFAULT_PORT_CHECK="false"
 DEFAULT_SPEED_TEST="false"
 DEFAULT_PING_CHECK="false"
 DEFAULT_CHECK_PROXIES="false"  # Verificação de proxies desativada por padrão
+DEFAULT_LIST_PROXIES="true"   # Listagem de proxies desativada por padrão
 API_URL="https://api.proxyscrape.com/v4/free-proxy-list/get"
 
 # ==============================================
@@ -188,7 +189,7 @@ main() {
     speed_test="${DEFAULT_SPEED_TEST}"
     ping_check="${DEFAULT_PING_CHECK}"
     check_proxies="${DEFAULT_CHECK_PROXIES}"
-    list_proxies=false
+    list_proxies="${DEFAULT_LIST_PROXIES}"
 
     # Processar argumentos
     while getopts "o:p:t:c:PSClh" opt; do
