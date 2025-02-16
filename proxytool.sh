@@ -14,13 +14,14 @@ NC='\033[0m'
 # Valores Padrão
 DEFAULT_OUTPUT="./proxies.txt"
 DEFAULT_PROTOCOL="http"
-DEFAULT_TIMEOUT="500"
+DEFAULT_TIMEOUT="5000"
 DEFAULT_COUNTRY="all"
 DEFAULT_PORT_CHECK="false"
 DEFAULT_SPEED_TEST="false"
 DEFAULT_PING_CHECK="false"
 DEFAULT_CHECK_PROXIES="false"  # Verificação de proxies desativada por padrão
-DEFAULT_LIST_PROXIES="true"   # Listagem de proxies desativada por padrão
+DEFAULT_LIST_PROXIES="false"   # Listagem de proxies desativada por padrão
+DEFAULT_CHECK_DEPS="false"     # Checagem de dependências desativada por padrão
 API_URL="https://api.proxyscrape.com/v4/free-proxy-list/get"
 
 # ==============================================
@@ -38,6 +39,7 @@ show_help() {
     echo "  -S              Testar velocidade com speedtest-go"
     echo "  -C              Verificar proxies (ping, porta, velocidade)"
     echo "  -l              Listar proxies"
+    echo "  -D              Verificar dependências"
     echo "  -h              Ajuda"
     echo -e "\nExemplos:"
     echo "  $0 -p socks5 -c US -C"
@@ -86,7 +88,12 @@ fetch_proxies() {
         exit 1
     fi
 
-    [[ $(wc -l < "$output_file") -eq 0 ]] && { echo -e "${RED}Nenhum proxy encontrado!${NC}"; exit 1; }
+    # Verifica se a lista de proxies está vazia
+    if [[ $(wc -l < "$output_file") -eq 0 ]]; then
+        echo -e "${RED}Nenhum proxy encontrado para o protocolo ${protocol}!${NC}"
+        exit 1
+    fi
+
     echo -e "${GREEN}Proxies salvos em: ${output_file}${NC}"
 }
 
@@ -178,7 +185,6 @@ list_proxies() {
 
 main() {
     clear
-    check_deps
 
     # Inicializa variáveis com valores padrão
     output_file="${DEFAULT_OUTPUT}"
@@ -190,9 +196,10 @@ main() {
     ping_check="${DEFAULT_PING_CHECK}"
     check_proxies="${DEFAULT_CHECK_PROXIES}"
     list_proxies="${DEFAULT_LIST_PROXIES}"
+    check_deps="${DEFAULT_CHECK_DEPS}"
 
     # Processar argumentos
-    while getopts "o:p:t:c:PSClh" opt; do
+    while getopts "o:p:t:c:PSClDh" opt; do
         case "$opt" in
             o) output_file="${OPTARG:-${DEFAULT_OUTPUT}}" ;;
             p) protocol="${OPTARG:-${DEFAULT_PROTOCOL}}" ;;
@@ -202,13 +209,17 @@ main() {
             S) speed_test=true ;;
             C) check_proxies=true ;;
             l) list_proxies=true ;;
+            D) check_deps=true ;;
             h) show_help ;;
             *) echo -e "${RED}Opção inválida!${NC}"; exit 1 ;;
         esac
     done
 
+    # Verificar dependências (opcional)
+    [[ "$check_deps" == true ]] && check_deps
+
     # Validações
-    [[ ! "$protocol" =~ ^(http|socks4|socks5)$ ]] && { echo -e "${RED}Protocolo inválido!${NC}"; exit 1; }
+    [[ ! "$protocol" =~ ^(http|socks4|socks5)$ ]] && { echo -e "${RED}Protocolo inválido! Use: http, socks4 ou socks5${NC}"; exit 1; }
 
     # Baixar proxies
     fetch_proxies
