@@ -14,13 +14,13 @@ NC='\033[0m'
 # Valores Padrão
 DEFAULT_OUTPUT="./proxies.txt"
 DEFAULT_PROTOCOL="http"
-DEFAULT_TIMEOUT="5000"
+DEFAULT_TIMEOUT="1000"
 DEFAULT_COUNTRY="all"
 DEFAULT_PORT_CHECK="false"
 DEFAULT_SPEED_TEST="false"
 DEFAULT_PING_CHECK="false"
 DEFAULT_CHECK_PROXIES="false"  # Verificação de proxies desativada por padrão
-DEFAULT_LIST_PROXIES="false"   # Listagem de proxies desativada por padrão
+DEFAULT_LIST_PROXIES="true"   # Listagem de proxies desativada por padrão
 DEFAULT_CHECK_DEPS="false"     # Checagem de dependências desativada por padrão
 API_URL="https://api.proxyscrape.com/v4/free-proxy-list/get"
 
