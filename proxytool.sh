@@ -1,192 +1,206 @@
 #!/bin/bash
 
 # ==============================================
-# CONFIGURAÇÕES GLOBAIS
+# GLOBAL CONFIGURATIONS
 # ==============================================
 
-# Cores
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+# Colors for terminal output
+RED='\033[0;31m'       # Red color for errors
+GREEN='\033[0;32m'     # Green color for success
+YELLOW='\033[0;33m'    # Yellow color for warnings
+BLUE='\033[0;34m'      # Blue color for information
+NC='\033[0m'           # No color (reset)
 
-# Valores Padrão
-DEFAULT_OUTPUT="./proxies.txt"
-DEFAULT_PROTOCOL="http"
-DEFAULT_TIMEOUT="1000"
-DEFAULT_COUNTRY="all"
-DEFAULT_PORT_CHECK="false"
-DEFAULT_SPEED_TEST="false"
-DEFAULT_PING_CHECK="false"
-DEFAULT_CHECK_PROXIES="false"  # Verificação de proxies desativada por padrão
-DEFAULT_LIST_PROXIES="true"   # Listagem de proxies desativada por padrão
-DEFAULT_CHECK_DEPS="false"     # Checagem de dependências desativada por padrão
-API_URL="https://api.proxyscrape.com/v4/free-proxy-list/get"
+# Default values
+DEFAULT_OUTPUT="./proxies.txt"       # Default output file for proxies
+DEFAULT_PROTOCOL="http"              # Default proxy protocol (http, socks4, socks5)
+DEFAULT_TIMEOUT="1000"               # Default timeout in milliseconds
+DEFAULT_COUNTRY="all"                # Default country filter (all countries)
+DEFAULT_PORT_CHECK="false"           # Default port check (disabled)
+DEFAULT_SPEED_TEST="false"           # Default speed test (disabled)
+DEFAULT_PING_CHECK="false"           # Default ping check (disabled)
+DEFAULT_CHECK_PROXIES="false"        # Default proxy verification (disabled)
+DEFAULT_LIST_PROXIES="false"         # Default proxy listing (disabled)
+DEFAULT_CHECK_DEPS="false"           # Default dependency check (disabled)
+API_URL="https://api.proxyscrape.com/v4/free-proxy-list/get"  # API URL to fetch proxies
 
 # ==============================================
-# FUNÇÕES
+# FUNCTIONS
 # ==============================================
 
+# Function to display help information
 show_help() {
-    echo -e "${YELLOW}Uso: $0 [OPÇÕES]${NC}"
-    echo "Opções:"
-    echo "  -o <arquivo>    Saída (padrão: ${DEFAULT_OUTPUT})"
-    echo "  -p <protocolo>  Protocolo (http, socks4, socks5) (padrão: ${DEFAULT_PROTOCOL})"
-    echo "  -t <timeout>    Timeout em ms (padrão: ${DEFAULT_TIMEOUT})"
-    echo "  -c <país>       Filtrar por país (ex: US, BR) (padrão: ${DEFAULT_COUNTRY})"
-    echo "  -P              Verificar ping dos proxies"
-    echo "  -S              Testar velocidade com speedtest-go"
-    echo "  -C              Verificar proxies (ping, porta, velocidade)"
-    echo "  -l              Listar proxies"
-    echo "  -D              Verificar dependências"
-    echo "  -h              Ajuda"
-    echo -e "\nExemplos:"
+    echo -e "${YELLOW}Usage: $0 [OPTIONS]${NC}"
+    echo "Options:"
+    echo "  -o <file>      Output file (default: ${DEFAULT_OUTPUT})"
+    echo "  -p <protocol>  Protocol (http, socks4, socks5) (default: ${DEFAULT_PROTOCOL})"
+    echo "  -t <timeout>   Timeout in ms (default: ${DEFAULT_TIMEOUT})"
+    echo "  -c <country>   Filter by country (e.g., US, BR) (default: ${DEFAULT_COUNTRY})"
+    echo "  -P             Check proxy ping"
+    echo "  -S             Test proxy speed with speedtest-go"
+    echo "  -C             Verify proxies (ping, port, speed)"
+    echo "  -l             List proxies"
+    echo "  -D             Check dependencies"
+    echo "  -h             Show help"
+    echo -e "\nExamples:"
     echo "  $0 -p socks5 -c US -C"
     echo "  $0 -o fast_proxies.txt -t 10000 -l"
     exit 0
 }
 
+# Function to check for required dependencies
 check_deps() {
-    local deps=("curl" "nping" "nc" "speedtest-go")
+    local deps=("curl" "nping" "nc" "speedtest-go")  # List of required dependencies
     local missing_deps=()
 
-    # Verifica se cada dependência está instalada
+    # Check if each dependency is installed
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
-            missing_deps+=("$dep")
+            missing_deps+=("$dep")  # Add missing dependency to the list
         fi
     done
 
-    # Se houver dependências faltando, tenta instalar com apt (sem sudo)
+    # If there are missing dependencies, try to install them using apt (without sudo)
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
-        echo -e "${YELLOW}As seguintes dependências estão faltando:${NC}" >&2
+        echo -e "${YELLOW}The following dependencies are missing:${NC}" >&2
         for dep in "${missing_deps[@]}"; do
-            echo -e "${YELLOW}- ${dep}${NC}" >&2
+            echo -e "${YELLOW}- ${dep}${NC}" >&2  # Display missing dependencies
         done
 
-        echo -e "\n${GREEN}Tentando instalar as dependências com apt...${NC}" >&2
+        echo -e "\n${GREEN}Attempting to install dependencies with apt...${NC}" >&2
         if apt install -y "${missing_deps[@]}" &> /dev/null; then
-            echo -e "${GREEN}Dependências instaladas com sucesso!${NC}" >&2
+            echo -e "${GREEN}Dependencies installed successfully!${NC}" >&2
         else
-            echo -e "${RED}Falha ao instalar as dependências.${NC}" >&2
-            echo -e "\n${GREEN}Para instalar manualmente, execute:${NC}" >&2
+            echo -e "${RED}Failed to install dependencies.${NC}" >&2
+            echo -e "\n${GREEN}To install manually, run:${NC}" >&2
             echo -e "${BLUE}sudo apt install -y ${missing_deps[*]}${NC}" >&2
             exit 1
         fi
     fi
 }
 
+# Function to fetch proxies from the API
 fetch_proxies() {
+    # Build the API URL with parameters
     local params="request=display_proxies&protocol=${protocol}&proxy_format=protocolipport&format=text&timeout=${timeout}&country=${country}"
     local url="${API_URL}?${params}"
     
-    echo -e "${BLUE}Baixando proxies ${protocol} (${country})...${NC}"
+    echo -e "${BLUE}Downloading ${protocol} proxies (${country})...${NC}"
     
+    # Fetch proxies using curl and save them to the output file
     if ! curl -s "$url" > "$output_file"; then
-        echo -e "${RED}Falha ao baixar proxies!${NC}" >&2
+        echo -e "${RED}Failed to download proxies!${NC}" >&2
         exit 1
     fi
 
-    # Verifica se a lista de proxies está vazia
+    # Check if the proxy list is empty
     if [[ $(wc -l < "$output_file") -eq 0 ]]; then
-        echo -e "${RED}Nenhum proxy encontrado para o protocolo ${protocol}!${NC}"
+        echo -e "${RED}No proxies found for protocol ${protocol}!${NC}"
         exit 1
     fi
 
-    echo -e "${GREEN}Proxies salvos em: ${output_file}${NC}"
+    echo -e "${GREEN}Proxies saved to: ${output_file}${NC}"
 }
 
+# Function to check if a proxy port is open
 check_port() {
-    local proxy=$1
-    local port=$2
+    local proxy=$1  # Proxy host
+    local port=$2   # Proxy port
+
+    # Use netcat (nc) to check if the port is open
     if nc -z -w 2 "$proxy" "$port" &> /dev/null; then
-        echo -e "${GREEN}Porta ${port} aberta${NC}"
+        echo -e "${GREEN}Port ${port} is open${NC}"
     else
-        echo -e "${RED}Porta ${port} fechada${NC}"
+        echo -e "${RED}Port ${port} is closed${NC}"
     fi
 }
 
+# Function to test proxy speed using speedtest-go
 test_speed() {
     local proxy=$1
-    echo -e "\n${YELLOW}Testando velocidade via proxy: ${proxy}${NC}"
+    echo -e "\n${YELLOW}Testing speed via proxy: ${proxy}${NC}"
     
-    # Executa o speedtest-go com proxy
+    # Run speedtest-go with the proxy
     local result
     if ! result=$(speedtest-go --proxy="http://${proxy}" --json 2>&1); then
-        echo -e "${RED}Falha ao executar speedtest-go!${NC}" >&2
-        echo -e "${YELLOW}Detalhes: ${result}${NC}" >&2
+        echo -e "${RED}Failed to run speedtest-go!${NC}" >&2
+        echo -e "${YELLOW}Details: ${result}${NC}" >&2
         return
     fi
 
-    # Processa o resultado
-    local download=$(echo "$result" | jq -r '.download.bandwidth')
-    local upload=$(echo "$result" | jq -r '.upload.bandwidth')
-    local ping=$(echo "$result" | jq -r '.ping.latency')
-    
-    # Exibe os resultados
+    # Parse the JSON result
+    local download=$(echo "$result" | jq -r '.download.bandwidth')  # Download speed in bps
+    local upload=$(echo "$result" | jq -r '.upload.bandwidth')      # Upload speed in bps
+    local ping=$(echo "$result" | jq -r '.ping.latency')           # Ping in ms
+
+    # Convert bandwidth to Mbps and display results
     echo -e "${BLUE}Download: $(echo "scale=2; $download / 125000" | bc) Mbps${NC}"
     echo -e "${BLUE}Upload: $(echo "scale=2; $upload / 125000" | bc) Mbps${NC}"
     echo -e "${BLUE}Ping: ${ping} ms${NC}"
 }
 
+# Function to check proxy ping using speedtest-go
 check_ping() {
     local proxy=$1
-    echo -e "\n${YELLOW}Verificando ping do proxy: ${proxy}${NC}"
+    echo -e "\n${YELLOW}Checking ping for proxy: ${proxy}${NC}"
     
-    # Executa o speedtest-go para verificar o ping
+    # Run speedtest-go in ping mode
     local result
     if ! result=$(speedtest-go --proxy="http://${proxy}" --ping-mode="http" --json 2>&1); then
-        echo -e "${RED}Falha ao verificar ping!${NC}" >&2
-        echo -e "${YELLOW}Detalhes: ${result}${NC}" >&2
+        echo -e "${RED}Failed to check ping!${NC}" >&2
+        echo -e "${YELLOW}Details: ${result}${NC}" >&2
         return
     fi
 
-    # Processa o resultado
-    local ping=$(echo "$result" | jq -r '.ping.latency')
+    # Parse the JSON result
+    local ping=$(echo "$result" | jq -r '.ping.latency')  # Ping in ms
     echo -e "${GREEN}Ping: ${ping} ms${NC}"
 }
 
+# Function to check a single proxy (ping, port, speed)
 check_proxy() {
     local link=$1
-    [[ -z "$link" ]] && return
+    [[ -z "$link" ]] && return  # Skip if the link is empty
 
+    # Extract proxy host and port from the link
     local proxy=$(echo "$link" | awk -F '//' '{print $2}')
     local host=${proxy%:*}
     local port=${proxy#*:}
 
     echo -e "\n${YELLOW}Proxy: ${host}:${port}${NC}"
     
-    # Ping (opcional)
+    # Check ping (if enabled)
     [[ "$ping_check" == true ]] && check_ping "${host}:${port}"
 
-    # Porta
+    # Check port (if enabled)
     [[ "$check_port" == true ]] && check_port "$host" "$port"
 
-    # Velocidade
+    # Test speed (if enabled)
     [[ "$speed_test" == true ]] && test_speed "${host}:${port}"
 }
 
+# Function to verify all proxies in the output file
 verify_proxies() {
-    echo -e "${BLUE}Verificando proxies...${NC}"
+    echo -e "${BLUE}Verifying proxies...${NC}"
     while read -r proxy; do
-        check_proxy "$proxy"
+        check_proxy "$proxy"  # Check each proxy
     done < "$output_file"
 }
 
+# Function to list all proxies in the output file
 list_proxies() {
-    echo -e "\n${BLUE}Proxies encontrados (${protocol}):${NC}"
-    cat -n "$output_file"
+    echo -e "\n${BLUE}Proxies found (${protocol}):${NC}"
+    cat -n "$output_file"  # Display proxies with line numbers
 }
 
 # ==============================================
-# EXECUÇÃO PRINCIPAL
+# MAIN EXECUTION
 # ==============================================
 
 main() {
-    clear
+    clear  # Clear the terminal screen
 
-    # Inicializa variáveis com valores padrão
+    # Initialize variables with default values
     output_file="${DEFAULT_OUTPUT}"
     protocol="${DEFAULT_PROTOCOL}"
     timeout="${DEFAULT_TIMEOUT}"
@@ -198,40 +212,40 @@ main() {
     list_proxies="${DEFAULT_LIST_PROXIES}"
     check_deps="${DEFAULT_CHECK_DEPS}"
 
-    # Processar argumentos
+    # Process command-line arguments
     while getopts "o:p:t:c:PSClDh" opt; do
         case "$opt" in
-            o) output_file="${OPTARG:-${DEFAULT_OUTPUT}}" ;;
-            p) protocol="${OPTARG:-${DEFAULT_PROTOCOL}}" ;;
-            t) timeout="${OPTARG:-${DEFAULT_TIMEOUT}}" ;;
-            c) country="${OPTARG:-${DEFAULT_COUNTRY}}" ;;
-            P) ping_check=true ;;
-            S) speed_test=true ;;
-            C) check_proxies=true ;;
-            l) list_proxies=true ;;
-            D) check_deps=true ;;
-            h) show_help ;;
-            *) echo -e "${RED}Opção inválida!${NC}"; exit 1 ;;
+            o) output_file="${OPTARG:-${DEFAULT_OUTPUT}}" ;;  # Set output file
+            p) protocol="${OPTARG:-${DEFAULT_PROTOCOL}}" ;;  # Set protocol
+            t) timeout="${OPTARG:-${DEFAULT_TIMEOUT}}" ;;    # Set timeout
+            c) country="${OPTARG:-${DEFAULT_COUNTRY}}" ;;    # Set country filter
+            P) ping_check=true ;;                            # Enable ping check
+            S) speed_test=true ;;                            # Enable speed test
+            C) check_proxies=true ;;                         # Enable proxy verification
+            l) list_proxies=true ;;                          # Enable proxy listing
+            D) check_deps=true ;;                            # Enable dependency check
+            h) show_help ;;                                  # Show help
+            *) echo -e "${RED}Invalid option!${NC}"; exit 1 ;;  # Handle invalid options
         esac
     done
 
-    # Verificar dependências (opcional)
+    # Check dependencies (if enabled)
     [[ "$check_deps" == true ]] && check_deps
 
-    # Validações
-    [[ ! "$protocol" =~ ^(http|socks4|socks5)$ ]] && { echo -e "${RED}Protocolo inválido! Use: http, socks4 ou socks5${NC}"; exit 1; }
+    # Validate protocol
+    [[ ! "$protocol" =~ ^(http|socks4|socks5)$ ]] && { echo -e "${RED}Invalid protocol! Use: http, socks4, or socks5${NC}"; exit 1; }
 
-    # Baixar proxies
+    # Fetch proxies
     fetch_proxies
 
-    # Verificar proxies (opcional)
+    # Verify proxies (if enabled)
     [[ "$check_proxies" == true ]] && verify_proxies
 
-    # Listar proxies (opcional)
+    # List proxies (if enabled)
     [[ "$list_proxies" == true ]] && list_proxies
 
-    echo -e "\n${GREEN}Concluído!${NC}"
+    echo -e "\n${GREEN}Done!${NC}"
 }
 
-# Executa o programa
+# Execute the script
 main "$@"
